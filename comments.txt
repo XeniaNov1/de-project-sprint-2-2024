@@ -1,0 +1,44 @@
+Замечание: Проверь, пожалуйста, правильно ли выполнено соединение данных, не теряются ли какие-то записи?
+Ответ: вроде все правильно, не вижу что не так, мы то же самое соединение в тренажере делали
+
+Замечание: Обновление существующих записей и добавление новых в dwh.d_craftsmans можно реализовать как:
+MERGE INTO dwh.d_craftsman d
+USING (SELECT DISTINCT craftsman_name, craftsman_address, craftsman_birthday, craftsman_email FROM tmp_sources) t
+ON <условие объединения>
+WHEN MATCHED THEN
+  UPDATE SET craftsman_address = t.craftsman_address, 
+craftsman_birthday = t.craftsman_birthday, load_dttm = current_timestamp
+WHEN NOT MATCHED THEN
+  INSERT (<указываем поля>)
+  VALUES (<указываем значения>);
+Аналогично для dwh.d_product, dwh.d_customer и dwh.f_order.
+Ещё не нахожу создание таблицы tmp_sources_fact. Она создаётся из таблиц tmp_sources, dwh.d_craftsman, dwh.d_customer и wh.d_product.
+
+Ответ: А зачем обновление? У нас по заданию - новый источник, вообще другая компания, обновление данных здесь не применимо
+Если ты про обновление в рамках инкрементарной загрузки - это будет ниже, в этом запросе я делаю витрину.
+Для чего нужна таблица tmp_sources_fact? У меня выше создана таблица merge_table, соединяющая внешние таблицы с теми, что есть уже сейчас
+
+
+Замечание: Для того, чтобы определить, какие данные были изменены в витрине или добавлены в DWH. Формируем дельту изменений:
+WITH
+dwh_delta AS ( 
+    SELECT
+            <выбор необходимых полей>
+            FROM dwh.f_order fo 
+                INNER JOIN dwh.d_craftsman dc ON fo.craftsman_id = dc.craftsman_id 
+                INNER JOIN dwh.d_customer dcs ON fo.customer_id = dcs.customer_id 
+                INNER JOIN dwh.d_product dp ON fo.product_id = dp.product_id 
+                LEFT JOIN dwh.craftsman_report_datamart crd ON dc.craftsman_id = crd.craftsman_id
+                    <условия фильтрации>
+),
+dwh_update_delta AS ( -- делаем выборку мастеров ручной работы, по которым были изменения в DWH. По этим мастерам данные в витрине нужно будет обновить
+    SELECT
+            dd.exist_craftsman_id AS craftsman_id
+            FROM dwh_delta dd 
+                WHERE dd.exist_craftsman_id IS NOT NULL
+),
+dwh_delta_insert_result AS ( -- делаем расчёт витрины по новым данным. Этой информации по мастерам в рамках расчётного периода раньше не было, это новые данные. Их можно просто вставить (insert) в витрину без обновления
+
+Ответ: почему в пояснении к примеру запроса написано, что надо делать выборку по мастерам? в данном проекте у нас в витрине группировка по покупателям, мастеров мы смотрим только в рамках выбора любимого мастера покупателя
+Таблица dwh_delta у меня имеется, это table_2, 
+таблицы dwh_update_delta и dwh_delta_insert_result также имеются, обрати, пожалуйста, внимание на мои запросы ниже, у них просто нейминг по номерам шагов, потому что мне так легче ориентироваться потом 
